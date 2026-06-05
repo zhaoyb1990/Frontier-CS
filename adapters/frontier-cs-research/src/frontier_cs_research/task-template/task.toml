@@ -1,0 +1,27 @@
+schema_version = "1.1"
+
+[task]
+name = "frontier-cs/{task_id}"
+authors = [{{ name = "Frontier-CS Team", email = "frontier-cs@berkeley.edu" }}]
+keywords = ["frontier-cs", "frontier-cs-research", "{tag}"]
+
+[metadata]
+difficulty = "hard"
+category = "research"
+tags = ["frontier-cs", "frontier-cs-research", "{tag}"]
+frontier_cs_problem_id = "{problem_id}"
+frontier_cs_track = "research"
+
+[verifier]
+timeout_sec = {verifier_timeout_sec}
+
+[agent]
+timeout_sec = {agent_timeout_sec}
+
+[environment]
+build_timeout_sec = {build_timeout_sec}
+cpus = {cpus}
+memory_mb = {memory_mb}
+storage_mb = {storage_mb}
+gpus = {gpus}
+allow_internet = true
