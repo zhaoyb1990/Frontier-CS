@@ -117,6 +117,39 @@ def test_default_has_no_agent_layer(tmp_path):
     assert "codex" not in dockerfile
 
 
+VECTOR_ADD = "vector_addition/2_20"
+
+
+def test_gpu_task_default_keeps_gpus_1_no_compose(tmp_path):
+    adapter = FrontierCSResearchAdapter(REPO_ROOT, tmp_path, task_ids=[VECTOR_ADD], overwrite=True)
+    task = adapter.run()[0]
+    assert "gpus = 1" in (task / "task.toml").read_text()
+    assert not (task / "environment" / "docker-compose.yaml").exists()
+
+
+def test_local_gpu_emits_compose_and_gpus_0(tmp_path):
+    adapter = FrontierCSResearchAdapter(
+        REPO_ROOT, tmp_path, task_ids=[VECTOR_ADD], overwrite=True, local_gpu=True
+    )
+    task = adapter.run()[0]
+    # harbor's local Docker validation needs gpus=0; GPU comes from the compose
+    assert "gpus = 0" in (task / "task.toml").read_text()
+    compose = (task / "environment" / "docker-compose.yaml")
+    assert compose.exists()
+    text = compose.read_text()
+    assert "driver: nvidia" in text and "capabilities: [gpu]" in text
+
+
+def test_local_gpu_does_not_touch_cpu_tasks(tmp_path):
+    # CPU task: no compose, gpus already 0, --local-gpu is a no-op for it
+    adapter = FrontierCSResearchAdapter(
+        REPO_ROOT, tmp_path, task_ids=[NBODY], overwrite=True, local_gpu=True
+    )
+    task = adapter.run()[0]
+    assert "gpus = 0" in (task / "task.toml").read_text()
+    assert not (task / "environment" / "docker-compose.yaml").exists()
+
+
 def test_with_agents_installs_cc_and_codex_via_npm(tmp_path):
     # both agents via npm, as the user runs them
     adapter = FrontierCSResearchAdapter(

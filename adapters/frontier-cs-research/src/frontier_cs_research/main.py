@@ -52,6 +52,14 @@ def main() -> None:
         "model-driven `harbor trial -a claude-code|codex` runs. Omit when the "
         "base image already bundles the agents or for oracle-only/offline use.",
     )
+    parser.add_argument(
+        "--local-gpu",
+        action="store_true",
+        help="For GPU problems, attach the GPU via a docker-compose device "
+        "reservation and set gpus=0 so harbor's local Docker backend (which can't "
+        "allocate GPUs itself) runs them. Needs the nvidia container runtime on the "
+        "host. Omit to keep gpus=1 (truthful for GPU-capable backends like Modal).",
+    )
     args = parser.parse_args()
 
     source = args.source
@@ -76,6 +84,7 @@ def main() -> None:
             task_ids=args.task_ids,
             docker_image=args.docker_image,
             with_agents=args.with_agents,
+            local_gpu=args.local_gpu,
         )
         results = adapter.run()
         print(f"\nDone: {len(results)} tasks generated")

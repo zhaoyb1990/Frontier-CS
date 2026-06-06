@@ -45,6 +45,22 @@ RUN if ! command -v npm >/dev/null 2>&1; then \
 ENV CLAUDE_CODE_MAX_OUTPUT_TOKENS=128000
 """
 
+# Harbor's local Docker environment doesn't allocate GPUs (its capabilities()
+# leaves gpus=False). For local GPU runs (`--local-gpu`) we instead request the
+# GPU through a docker-compose device reservation on the `main` service and set
+# task.toml gpus=0 so harbor's GPU validation passes. The host needs the nvidia
+# container runtime (nvidia-ctk runtime configure --runtime=docker).
+_GPU_COMPOSE = """services:
+  main:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+"""
+
 
 def _make_task_paths(task_dir: Path):
     try:
@@ -137,6 +153,7 @@ class FrontierCSResearchAdapter:
         template_dir: Path | None = None,
         docker_image: str | None = None,
         with_agents: bool = False,
+        local_gpu: bool = False,
     ):
         self.root = Path(frontier_cs_root)
         self.output_dir = Path(output_dir)
@@ -146,6 +163,7 @@ class FrontierCSResearchAdapter:
         self.template_dir = Path(template_dir or TEMPLATE_DIR)
         self.docker_image = docker_image
         self.with_agents = with_agents
+        self.local_gpu = local_gpu
 
     def run(self) -> list[Path]:
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -218,6 +236,10 @@ class FrontierCSResearchAdapter:
             ),
             encoding="utf-8",
         )
+        # Local GPU mode: attach the GPU to `main` via a compose device reservation
+        # (harbor's local Docker backend won't do it on its own).
+        if self.local_gpu and problem.gpu:
+            (env_dir / "docker-compose.yaml").write_text(_GPU_COMPOSE, encoding="utf-8")
 
     def _write_tests(self, task_paths: "TaskPaths", problem: ResearchProblem) -> None:
         tests_dir = task_paths.tests_dir
@@ -273,6 +295,13 @@ class FrontierCSResearchAdapter:
         resources = runtime.get("resources", {}) or {}
         cpus = _int_from(resources.get("cpus"), 4)
         memory_gb = _int_from(resources.get("memory"), 8)
+        # In local-gpu mode the GPU is handed to the container via the compose
+        # device reservation, so declare gpus=0 to satisfy harbor's local Docker
+        # GPU validation (it can't allocate GPUs itself).
+        if problem.gpu and not self.local_gpu:
+            gpus = 1
+        else:
+            gpus = 0
         text = template.format(
             task_id=problem.task_id,
             problem_id=problem.problem_id,
@@ -283,7 +312,7 @@ class FrontierCSResearchAdapter:
             cpus=cpus,
             memory_mb=memory_gb * 1024,
             storage_mb=16384,
-            gpus=1 if problem.gpu else 0,
+            gpus=gpus,
         )
         try:
             from harbor.models.task.config import TaskConfig
