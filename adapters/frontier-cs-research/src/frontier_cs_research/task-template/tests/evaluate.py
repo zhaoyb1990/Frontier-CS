@@ -40,6 +40,21 @@ def clamp_reward(x: float) -> float:
     return max(0.0, min(1.0, float(x)))
 
 
+def make_scripts_executable(root) -> None:
+    """Restore the +x bit on every *.sh under ``root``.
+
+    Many upstream scripts are checked into git without execute permission, but
+    evaluate.sh calls run_evaluator.sh / set_up_env.sh directly (not via `bash`),
+    so they must be executable. Mirrors research_docker's
+    `find /work -name '*.sh' -exec chmod +x`.
+    """
+    for sh in Path(root).rglob("*.sh"):
+        try:
+            sh.chmod(sh.stat().st_mode | 0o111)
+        except OSError:
+            pass
+
+
 def parse_score(output: str):
     """Return (score, score_unbounded, err). Last numeric line wins; lines
     starting with '[' or containing INFO/ERROR are treated as logs. A numeric
@@ -108,6 +123,8 @@ def main() -> None:
     if dst_research.exists():
         shutil.rmtree(dst_research)
     shutil.copytree(TESTS_DIR / "research", dst_research)
+
+    make_scripts_executable(dst_research)
 
     exec_env = WORK / "execution_env" / "solution_env"
     exec_env.mkdir(parents=True, exist_ok=True)

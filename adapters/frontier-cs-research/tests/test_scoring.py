@@ -67,3 +67,20 @@ def test_parse_error_on_empty():
 ])
 def test_clamp_reward(raw, expected):
     assert verifier.clamp_reward(raw) == expected
+
+
+# ---- make_scripts_executable ----------------------------------------------
+
+def test_make_scripts_executable_adds_x_bit(tmp_path):
+    # upstream scripts arrive without +x; evaluate.sh calls them directly
+    nested = tmp_path / "research" / "cross_entropy"
+    nested.mkdir(parents=True)
+    sh = nested / "run_evaluator.sh"
+    sh.write_text("#!/bin/bash\necho hi\n")
+    sh.chmod(0o644)  # rw-r--r--, no execute (the bug condition)
+    assert not (sh.stat().st_mode & 0o111)
+
+    verifier.make_scripts_executable(tmp_path)
+
+    mode = sh.stat().st_mode
+    assert mode & 0o100 and mode & 0o010 and mode & 0o001  # u+x g+x o+x
