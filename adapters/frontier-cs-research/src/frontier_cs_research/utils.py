@@ -82,13 +82,26 @@ def detect_gpu(config: dict[str, Any]) -> bool:
     )
 
 
+# research/solutions/<id>/ holds model-generated solutions of varying quality
+# (and some that don't even run). Prefer the strongest models' base variant so
+# the oracle isn't an arbitrary alphabetical pick (which lands on a broken
+# deepseekreasoner_1.py for several kernel problems).
+PREFERRED_MODELS = (
+    "gpt5_high", "gpt5.2", "gpt5.1", "gpt5", "gpt5_medium",
+    "gemini3pro", "gemini2.5pro", "trinitylargethinking",
+    "deepseekreasoner", "grok4fastreasoning",
+)
+
+
 def find_reference(
     problem_dir: Path, solutions_root: Path, problem_id: str, ext: str
 ) -> Path | None:
     """Pick the oracle reference solution.
 
     Preference: problem_dir/reference.<ext> > solutions/<id>/reference*.<ext> >
-    first solutions/<id>/*.<ext>.
+    the base variant of the strongest available model > first solutions/<id>/*.<ext>.
+    These are model outputs, not hand-tuned optima, so even the chosen one may
+    score 0 on hard kernel problems — that's the benchmark, not a bug.
     """
     p = problem_dir / f"reference.{ext}"
     if p.exists():
@@ -98,6 +111,10 @@ def find_reference(
         for cand in (f"reference.{ext}", f"reference_baseline.{ext}"):
             if (sdir / cand).exists():
                 return sdir / cand
+        for model in PREFERRED_MODELS:
+            cand = sdir / f"{model}.{ext}"  # base variant (no _1/_2 suffix)
+            if cand.exists():
+                return cand
         files = sorted(sdir.glob(f"*.{ext}"))
         if files:
             return files[0]

@@ -94,6 +94,19 @@ def test_find_reference_falls_back_to_solutions(tmp_path):
     assert got == cand
 
 
+def test_find_reference_prefers_strong_model_over_alphabetical(tmp_path):
+    # the real bug: alphabetical pick lands on a broken deepseekreasoner_1.py;
+    # we should prefer the strongest model's base variant instead
+    prob = tmp_path / "problems" / "p"
+    prob.mkdir(parents=True)
+    sols = tmp_path / "solutions" / "p"
+    sols.mkdir(parents=True)
+    (sols / "deepseekreasoner_1.py").write_text("# broken, but alphabetically first")
+    (sols / "gpt5_high.py").write_text("# strong")
+    got = find_reference(prob, tmp_path / "solutions", "p", "py")
+    assert got == sols / "gpt5_high.py"
+
+
 def test_find_reference_none_when_absent(tmp_path):
     prob = tmp_path / "problems" / "p"
     prob.mkdir(parents=True)
