@@ -206,12 +206,36 @@ class FrontierCSResearchAdapter:
 
     def _write_instruction(self, task_paths: "TaskPaths", problem: ResearchProblem) -> None:
         solution_path = f"/app/solution.{problem.ext}"
+        # The verifier stages ONLY this one file into the eval sandbox
+        # (tests/evaluate.py copies just solution.<ext> into
+        # /work/execution_env/solution_env/); any sibling files the agent writes
+        # are left behind. Make that constraint explicit so the agent keeps its
+        # whole solution self-contained.
+        submission_rules = (
+            f"Write your COMPLETE solution to `{solution_path}` — that single file "
+            "is the only thing evaluated. Any other files you create are discarded "
+            "before scoring and will not exist at evaluation time, so your solution "
+            "must be fully self-contained in this one file.\n\n"
+        )
+        # Kernel-problem readmes offer a `{\"program_path\": \"path/to/kernel.py\"}`
+        # return option that points at a SEPARATE file — unusable here, since that
+        # file is never staged (and run_evaluator.sh cd's to the problem dir, so a
+        # relative path can't resolve to the agent's file either). Every reference
+        # solution returns its source inline via `{\"code\": ...}`; steer the agent
+        # there whenever the statement surfaces the program_path option.
+        if "program_path" in problem.statement:
+            submission_rules += (
+                "Return-format note: this problem's API may offer "
+                '`{"program_path": "path/to/kernel.py"}`. Do NOT use it — that file '
+                "is not staged for evaluation and will fail with FileNotFoundError. "
+                'Return your full source inline via `{"code": "<source>"}` instead.\n\n'
+            )
         header = (
             "You are solving a Frontier-CS research (systems/ML performance) problem.\n\n"
-            f"Write your solution to `{solution_path}`. The problem readme below "
-            "defines the required `Solution` interface (a `Solution` class with a "
-            "`solve()` method whose signature depends on the problem) and the scoring "
-            "formula. Only the final solution file is evaluated.\n\n"
+            + submission_rules
+            + "The problem readme below defines the required `Solution` interface "
+            "(a `Solution` class with a `solve()` method whose signature depends on "
+            "the problem) and the scoring formula.\n\n"
             f"Problem id: `{problem.problem_id}`\n"
             f"Language: `{problem.language}`\n"
             f"GPU: `{'yes' if problem.gpu else 'no'}`"
@@ -219,8 +243,18 @@ class FrontierCSResearchAdapter:
             + "\n\n"
             "Original problem statement:\n\n"
         )
+        # We commit to single-file submissions, so also strip the unsupported
+        # `{"program_path": ...}` return option from the appended statement — each
+        # kernel readme carries it as one standalone bullet pointing at a separate
+        # file that is never staged. Leaves the `{"code": ...}` inline option (and
+        # everything else) intact, so the model never sees the dead path.
+        statement = problem.statement.rstrip()
+        if "program_path" in statement:
+            statement = "\n".join(
+                ln for ln in statement.splitlines() if '"program_path"' not in ln
+            )
         task_paths.instruction_path.write_text(
-            header + problem.statement.rstrip() + "\n", encoding="utf-8"
+            header + statement + "\n", encoding="utf-8"
         )
 
     def _write_environment(self, task_paths: "TaskPaths", problem: ResearchProblem) -> None:
